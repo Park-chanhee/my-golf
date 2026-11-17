@@ -186,5 +186,11 @@ h2{font-size:16px;font-weight:700;margin:0}
 .raw summary{font-size:12px;color:var(--muted)}
 .raw pre{font-size:11px;white-space:pre-wrap;max-height:160px;overflow:auto;background:#fff;padding:8px;border-radius:8px}
 
+/* 아이폰은 글자 크기가 16px보다 작은 입력칸을 누르면 화면을 확대함 → 아이폰에서만 16px로 */
+@supports (-webkit-touch-callout: none) {
+  input, select, textarea { font-size: 16px !important; }
+  .oc { width: 30px; }
+}
+
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));background:#222;color:#fff;padding:10px 16px;border-radius:999px;font-size:13px;z-index:60}
 @media (prefers-reduced-motion:no-preference){main>*{animation:in .25s ease both}@keyframes in{from{opacity:.4;transform:translateY(4px)}}}
