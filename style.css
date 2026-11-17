@@ -84,7 +84,12 @@ h2{font-size:16px;font-weight:700;margin:0}
 .field label{font-size:12px;color:var(--muted);font-weight:500}
 .field input,.field select,.field textarea{border:1px solid #DDD;border-radius:12px;padding:11px 12px;background:#fff;width:100%}
 .field textarea{min-height:80px;resize:vertical}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.two>*{min-width:0}
+/* 아이폰 Safari의 날짜/시간 칸이 칸 너비를 넘지 않도록 */
+.field input{min-width:0;max-width:100%}
+.field input[type=date],.field input[type=time]{-webkit-appearance:none;appearance:none;display:block;min-height:44px;line-height:20px;text-align:left}
+.field input::-webkit-date-and-time-value{text-align:left;margin:0}
 .seg{display:flex;gap:6px;flex-wrap:wrap}
 
 /* score entry */
