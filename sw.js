@@ -1,5 +1,5 @@
 // 오프라인 사용: 항상 서버의 최신 파일을 먼저 받고(브라우저 캐시 무시), 안 되면 저장본 사용
-const CACHE = 'mygolf-v3';
+const CACHE = 'mygolf-v4';
 const FILES = ['./', 'index.html', 'manifest.json', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' }))))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });

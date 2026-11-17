@@ -1,39 +1,39 @@
-# App icon generator: deep green bg, light green hill, white flag pole, red flag, golf ball
+# App icon generator: fitness-ring style (black bg, green ring, white pole, red flag)
 Add-Type -AssemblyName System.Drawing
 $out = Join-Path $PSScriptRoot 'icons'
 New-Item -ItemType Directory -Force $out | Out-Null
+
+function C($r, $g, $b, $a = 255) { [System.Drawing.Color]::FromArgb($a, $r, $g, $b) }
 
 function Draw([int]$S, [string]$name) {
   $bmp = New-Object System.Drawing.Bitmap $S, $S
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $g.SmoothingMode = 'AntiAlias'
   $k = $S / 512.0
-  # --
-  $rect = New-Object System.Drawing.Rectangle 0, 0, $S, $S
-  $bg = New-Object System.Drawing.Drawing2D.LinearGradientBrush $rect, ([System.Drawing.Color]::FromArgb(46,107,69)), ([System.Drawing.Color]::FromArgb(23,72,47)), 90
-  $g.FillRectangle($bg, $rect)
-  # --
-  $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(79,143,90))), [float](-120*$k), [float](330*$k), [float](760*$k), [float](420*$k))
-  $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(127,191,110))), [float](-60*$k), [float](372*$k), [float](640*$k), [float](380*$k))
-  # --
-  $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(18,59,39))), [float](262*$k), [float](392*$k), [float](44*$k), [float](14*$k))
-  # --
-  $white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
-  $g.FillRectangle($white, [float](280*$k), [float](112*$k), [float](10*$k), [float](290*$k))
-  # --
-  $flag = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(224,75,75))
+  $g.Clear((C 0 0 0))
+  # ring track
+  $rr = 150 * $k; $w = 44 * $k
+  $rect = New-Object System.Drawing.RectangleF ([float](256 * $k - $rr)), ([float](256 * $k - $rr)), ([float](2 * $rr)), ([float](2 * $rr))
+  $track = New-Object System.Drawing.Pen (C 31 59 36), ([float]$w)
+  $g.DrawEllipse($track, $rect)
+  # ring progress with diagonal gradient and round caps
+  $gr = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.RectangleF 0, 0, $S, $S), (C 182 255 92), (C 47 214 107), ([float]45)
+  $pen = New-Object System.Drawing.Pen $gr, ([float]$w)
+  $pen.StartCap = 'Round'; $pen.EndCap = 'Round'
+  $g.DrawArc($pen, $rect, [float]-90, [float]250)
+  # pole
+  $white = New-Object System.Drawing.SolidBrush (C 255 255 255)
+  $g.FillRectangle($white, [float](248 * $k), [float](203 * $k), [float](14 * $k), [float](104 * $k))
+  $g.FillEllipse($white, [float](248 * $k), [float](200 * $k), [float](14 * $k), [float](14 * $k))
+  # red flag
+  $red = New-Object System.Drawing.SolidBrush (C 255 59 48)
   $pts = [System.Drawing.PointF[]]@(
-    (New-Object System.Drawing.PointF ([float](290*$k)), ([float](112*$k))),
-    (New-Object System.Drawing.PointF ([float](400*$k)), ([float](152*$k))),
-    (New-Object System.Drawing.PointF ([float](290*$k)), ([float](192*$k))))
-  $g.FillPolygon($flag, $pts)
-  # --
-  $g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(70,0,0,0))), [float](150*$k), [float](398*$k), [float](74*$k), [float](16*$k))
-  $g.FillEllipse($white, [float](150*$k), [float](338*$k), [float](70*$k), [float](70*$k))
-  $dim = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(40,31,95,63))
-  foreach ($d in @(@(172,358),@(192,354),@(182,374),@(202,372),@(170,382),@(194,390))) {
-    $g.FillEllipse($dim, [float]($d[0]*$k), [float]($d[1]*$k), [float](8*$k), [float](8*$k))
-  }
+    (New-Object System.Drawing.PointF ([float](262 * $k)), ([float](204 * $k))),
+    (New-Object System.Drawing.PointF ([float](316 * $k)), ([float](226 * $k))),
+    (New-Object System.Drawing.PointF ([float](262 * $k)), ([float](248 * $k))))
+  $g.FillPolygon($red, $pts)
+  # hole
+  $g.FillEllipse((New-Object System.Drawing.SolidBrush (C 255 255 255 153)), [float](217 * $k), [float](305 * $k), [float](76 * $k), [float](18 * $k))
   $g.Dispose()
   $bmp.Save((Join-Path $out $name), [System.Drawing.Imaging.ImageFormat]::Png)
   $bmp.Dispose()
