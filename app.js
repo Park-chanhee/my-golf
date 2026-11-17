@@ -288,6 +288,12 @@
     return `
       <div class="top"><div><button class="back" id="back">← 뒤로</button><h1>${r ? '라운딩 수정' : '라운딩 등록'}</h1></div></div>
       <form class="form" id="f">
+        <details class="import" ${r ? '' : 'open'}><summary>예약 메시지로 자동 채우기</summary>
+          <div class="field" style="margin-top:10px"><label for="bookmsg">카카오톡·문자로 받은 예약 확정 메시지를 붙여넣어 주세요</label>
+            <textarea id="bookmsg" placeholder="[카카오골프예약] 예약이 확정되었습니다.&#10;골프장: 남서울CC&#10;일시: 2026.11.22(토) 07:12&#10;그린피: 210,000원"></textarea></div>
+          <button class="btn ghost block" type="button" id="parseBook" style="margin-top:8px">메시지에서 정보 가져오기</button>
+          <p class="hint" id="bookHint"></p>
+        </details>
         <div class="field"><label for="course">골프장</label><input id="course" required list="courses" value="${esc(d.course)}" placeholder="예: 남서울CC">
           <datalist id="courses">${courses.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
         <div class="two"><div class="field"><label for="date">날짜</label><input id="date" type="date" required value="${d.date}"></div>
@@ -304,6 +310,19 @@
   }
   function bindEdit(id) {
     $('#back').addEventListener('click', () => history.back());
+    $('#parseBook').addEventListener('click', () => {
+      const info = parseBooking($('#bookmsg').value);
+      const got = [];
+      const set = (sel, v, label) => { if (v != null && v !== '') { $(sel).value = v; got.push(label); } };
+      set('#course', info.course, '골프장'); set('#date', info.date, '날짜'); set('#tee', info.tee, '티오프');
+      set('#region', info.region, '지역'); set('#fee', info.fee, '그린피');
+      if (info.holes) { $('#holes').value = String(info.holes); got.push('홀 수'); }
+      if (info.players && !$('#players').value) set('#players', info.players, '동반자');
+      const missing = ['골프장', '날짜', '티오프'].filter(x => !got.includes(x));
+      $('#bookHint').textContent = got.length
+        ? `채운 항목: ${got.join(', ')}.${missing.length ? ' 못 찾은 항목(' + missing.join(', ') + ')은 직접 입력해 주세요.' : ' 확인 후 등록을 눌러 주세요.'}`
+        : '메시지에서 예약 정보를 찾지 못했어요. 골프장 이름과 날짜가 들어 있는지 확인해 주세요.';
+    });
     $('#f').addEventListener('submit', e => {
       e.preventDefault();
       let r = id ? state.rounds.find(x => x.id === id) : null;
@@ -327,6 +346,171 @@
     });
   }
 
+  // ---------- 예약 메시지 해석 ----------
+  function parseBooking(text) {
+    const t = String(text || '').replace(/\r/g, '');
+    const out = {};
+    const lines = t.split('\n').map(s => s.trim()).filter(Boolean);
+    const label = re => { for (const l of lines) { const m = l.match(re); if (m && m[1].trim()) return m[1].trim(); } return null; };
+    // 골프장
+    let course = label(/^(?:[^\s가-힣A-Za-z0-9]+\s*)?(?:골프장|골프장명|구장|코스명|장소|예약\s*골프장)\s*[:：]\s*(.+)$/);
+    if (!course) {
+      const m = t.match(/([가-힣A-Za-z0-9&()\s]{2,30}?(?:컨트리\s*클럽|컨트리클럽|골프\s*클럽|골프클럽|골프앤리조트|골프\s*&\s*리조트|골프리조트|C\.C|CC|GC|G\.C|CLUB|골프장))/);
+      if (m) course = m[1].replace(/^.*[\]】:：]\s*/, '').trim();
+    }
+    if (course) out.course = course.replace(/\s*\((?:[^)]*코스[^)]*)\)\s*$/, '').replace(/\s{2,}/g, ' ').slice(0, 40);
+    // 날짜
+    const now = new Date(); let y, mo, d;
+    let m = t.match(/(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/);
+    if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = t.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/)) || (m = t.match(/(?:^|[^\d:])(\d{1,2})[./](\d{1,2})\s*\(?[월화수목금토일]/))) {
+      mo = +m[1]; d = +m[2]; y = now.getFullYear();
+      const cand = new Date(y, mo - 1, d);
+      if (cand < new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30)) y++;
+    }
+    if (y && mo >= 1 && mo <= 12 && d >= 1 && d <= 31) out.date = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    // 티오프 시간
+    m = t.match(/(?:티\s*오프|티업|시간|일시)[^\n\d]*(?:20\d{2}[^\n]*?)?(\d{1,2})\s*[:시]\s*(\d{2})/) || t.match(/(?:^|[^\d])(\d{1,2}):(\d{2})(?!\d)/);
+    if (m) {
+      let h = +m[1]; const mi = +m[2];
+      if (/오후\s*$/.test(t.slice(0, m.index + m[0].indexOf(m[1])).slice(-6)) && h < 12) h += 12;
+      if (h <= 23 && mi <= 59) out.tee = `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`;
+    }
+    // 그린피
+    m = t.match(/(?:그린피|그린\s*피|요금|이용\s*요금|결제\s*금액|금액|1인)[^\d\n]*([\d,]{4,})\s*원?/);
+    if (!m) m = t.match(/([\d,]{5,})\s*원/);
+    if (m) { const v = Number(m[1].replace(/,/g, '')); if (v >= 10000 && v <= 2000000) out.fee = v; }
+    // 홀 수
+    m = t.match(/(9|18|27|36)\s*홀/); if (m) out.holes = +m[1] === 9 ? 9 : 18;
+    // 지역 (주소 줄)
+    const addr = label(/^(?:[^\s가-힣A-Za-z0-9]+\s*)?(?:주소|위치)\s*[:：]\s*(.+)$/);
+    if (addr) out.region = addr.split(/\s+/).slice(0, 2).join(' ').replace(/(특별시|광역시|특별자치도|특별자치시)$/, '');
+    // 동반자 (예약자/동반자 이름 줄)
+    const ppl = label(/^(?:[^\s가-힣A-Za-z0-9]+\s*)?(?:동반자|동반인|플레이어)\s*[:：]\s*(.+)$/);
+    if (ppl) out.players = ppl.replace(/\s*[\/·]\s*/g, ', ');
+    return out;
+  }
+
+  // ---------- 스코어카드 사진 인식 ----------
+  let tessLoading = null;
+  function loadTesseract() {
+    if (window.Tesseract) return Promise.resolve();
+    if (!tessLoading) tessLoading = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      s.onload = res; s.onerror = () => { tessLoading = null; rej(new Error('load')); };
+      document.head.appendChild(s);
+    });
+    return tessLoading;
+  }
+  function prepImage(file) {
+    // 글자 인식이 잘 되도록 키우고 흑백 대비를 올림
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(3, Math.max(1, 2000 / img.width));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0, c.width, c.height);
+        const px = g.getImageData(0, 0, c.width, c.height), a = px.data;
+        let sumL = 0; for (let i = 0; i < a.length; i += 4) sumL += a[i] * .3 + a[i + 1] * .59 + a[i + 2] * .11;
+        const mean = sumL / (a.length / 4), dark = mean < 110; // 다크 화면 캡처면 반전
+        for (let i = 0; i < a.length; i += 4) {
+          let l = a[i] * .3 + a[i + 1] * .59 + a[i + 2] * .11; if (dark) l = 255 - l;
+          l = l < 150 ? 0 : 255; a[i] = a[i + 1] = a[i + 2] = l;
+        }
+        g.putImageData(px, 0, 0); URL.revokeObjectURL(url); res(c);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('img')); };
+      img.src = url;
+    });
+  }
+  function numsOf(line) {
+    return (line.match(/[+-]?\d+/g) || []).map(Number);
+  }
+  // OCR 글자에서 파/타수/퍼팅 줄을 찾아 홀별 값으로 정리
+  function parseScorecard(text, holes) {
+    const isHoleNo = n => n.slice(0, 9).every((v, i) => v === n[0] + i) && (n[0] === 1 || n[0] === 10);
+    const rows = String(text).split('\n').map(s => ({ raw: s, n: numsOf(s) })).filter(r => r.n.length >= 9 && !isHoleNo(r.n));
+    const isPar = r => r.n.slice(0, 9).every(v => v >= 3 && v <= 5) && !/[+-]/.test(r.raw.replace(/^\D+/, '').slice(0, 30));
+    const isRel = r => r.n.slice(0, 9).some(v => v < 0) || (r.n.slice(0, 9).filter(v => v === 0).length >= 2 && r.n.slice(0, 9).every(v => v >= -3 && v <= 6));
+    const blocks = []; let cur = null;
+    rows.forEach(r => {
+      if (isPar(r) && (!cur || cur.rows.length)) { cur = { par: r, rows: [] }; blocks.push(cur); }
+      else if (cur) cur.rows.push(r);
+      else { cur = { par: null, rows: [r] }; blocks.push(cur); }
+    });
+    const res = { par: Array(18).fill(null), strokes: Array(18).fill(null), putts: Array(18).fill(null) };
+    let offset = 0;
+    blocks.forEach(b => {
+      // 한 줄에 18홀이 다 있으면 18개, 아니면 9개씩
+      const width = (b.par && b.par.n.length >= 18 && b.par.n.slice(9, 18).every(v => v >= 3 && v <= 5)) ? 18 : 9;
+      if (offset >= holes) return;
+      const par = b.par ? b.par.n.slice(0, width) : null;
+      const sc = b.rows.find(r => r.n.slice(0, width).every(v => v >= -3 && v <= 12));
+      const pt = b.rows.find(r => r !== sc && r.n.slice(0, width).every(v => v >= 0 && v <= 4));
+      for (let i = 0; i < width && offset + i < 18; i++) {
+        if (par) res.par[offset + i] = par[i];
+        if (sc && sc.n[i] != null) {
+          const p = par ? par[i] : null;
+          res.strokes[offset + i] = isRel(sc) && p ? p + sc.n[i] : sc.n[i];
+        }
+        if (pt && pt.n[i] != null) res.putts[offset + i] = pt.n[i];
+      }
+      offset += width;
+    });
+    return res;
+  }
+  async function ocrScorecard(file, id) {
+    const r = state.rounds.find(x => x.id === id); if (!r) return;
+    const box = $('#ocrBox');
+    box.hidden = false; box.innerHTML = '<p class="hint">사진을 읽는 중이에요… 처음에는 인식 도구를 내려받느라 10~20초 걸릴 수 있어요.</p>';
+    try {
+      await loadTesseract();
+      const canvas = await prepImage(file);
+      const worker = await Tesseract.createWorker('eng');
+      await worker.setParameters({ tessedit_char_whitelist: '0123456789+-. ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' });
+      const { data } = await worker.recognize(canvas);
+      await worker.terminate();
+      const got = parseScorecard(data.text, holesOf(r));
+      const n = holesOf(r);
+      const found = got.strokes.slice(0, n).filter(v => v != null).length;
+      pendingOcr = { id, got };
+      box.innerHTML = reviewGrid(r, got) + `<p class="hint">${found ? `${found}/${n}홀의 타수를 읽었어요. 틀린 칸은 눌러서 고친 뒤 저장해 주세요.` : '타수를 찾지 못했어요. 스코어카드 표가 화면에 꽉 차게 캡처한 사진으로 다시 시도하거나, 아래 표에 직접 입력해 주세요.'}</p>
+        <div class="two"><button class="btn ghost" type="button" id="ocrCancel">취소</button><button class="btn" type="button" id="ocrSave">이대로 저장</button></div>
+        <details class="raw"><summary>인식된 글자 보기</summary><pre>${esc(data.text)}</pre></details>`;
+      $('#ocrCancel').addEventListener('click', () => { pendingOcr = null; box.hidden = true; });
+      $('#ocrSave').addEventListener('click', () => saveOcr(r));
+    } catch (e) {
+      box.innerHTML = '<p class="hint">사진 인식을 시작하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.</p>';
+    }
+  }
+  let pendingOcr = null;
+  function reviewGrid(r, got) {
+    const n = holesOf(r);
+    const block = (from, to) => {
+      const idx = []; for (let i = from; i < to; i++) idx.push(i);
+      const cell = (k, i) => `<td><input class="oc" inputmode="numeric" data-k="${k}" data-i="${i}" value="${got[k][i] ?? (k === 'par' ? r.par[i] : '')}"></td>`;
+      return `<div class="tbl" style="margin:8px 0 0"><table>
+        <tr><th>홀</th>${idx.map(i => `<th>${i + 1}</th>`).join('')}</tr>
+        <tr><th>파</th>${idx.map(i => cell('par', i)).join('')}</tr>
+        <tr><th>타수</th>${idx.map(i => cell('strokes', i)).join('')}</tr>
+        <tr><th>퍼팅</th>${idx.map(i => cell('putts', i)).join('')}</tr></table></div>`;
+    };
+    return `<h2 style="margin-top:4px">사진에서 읽은 스코어</h2>${block(0, Math.min(9, n))}${n === 18 ? block(9, 18) : ''}`;
+  }
+  function saveOcr(r) {
+    const n = holesOf(r);
+    view.querySelectorAll('input.oc').forEach(inp => {
+      const k = inp.dataset.k, i = Number(inp.dataset.i); if (i >= n) return;
+      const v = inp.value.trim() === '' ? null : Number(inp.value);
+      if (k === 'par') { if (v >= 3 && v <= 6) r.par[i] = v; }
+      else r[k][i] = v != null && !isNaN(v) && v >= (k === 'strokes' ? 1 : 0) && v <= 15 ? v : null;
+    });
+    pendingOcr = null; save(); toast('스코어를 저장했어요');
+    render();
+  }
+
   // ---------- 화면: 스코어 입력 ----------
   function vScore(id) {
     const r = state.rounds.find(x => x.id === id);
@@ -347,12 +531,17 @@
       <div class="top"><div><button class="back" id="back">← ${esc(r.course)}</button><h1>스코어 입력</h1></div></div>
       <div class="totalbar"><div><div class="muted" style="font-size:11.5px">${filled(r)}/${n}홀 · 파 ${parTotal(r)}</div><div class="v num">${total(r) || 0} <small style="font-size:14px;color:var(--g)">${filled(r) ? signed(sum(r.strokes.slice(0, n).map((s, i) => s ? s - r.par[i] : 0))) : ''}</small></div></div>
         <a class="btn" href="#round/${r.id}">완료</a></div>
+      <div class="form" style="padding-bottom:0">
+        <label class="btn ghost block">📷 스코어카드 캡처로 입력<input type="file" accept="image/*" hidden id="ocrFile"></label>
+        <div id="ocrBox" class="ocrbox" hidden></div>
+      </div>
       <div class="holes">${rows.join('')}</div>
       <p class="muted pad" style="font-size:12px;line-height:1.6">타수의 + 버튼을 처음 누르면 그 홀의 파 값부터 시작해요. 입력하는 즉시 저장돼요.</p>`;
   }
   function bindScore(id) {
     const r = state.rounds.find(x => x.id === id); if (!r) return;
     $('#back').addEventListener('click', () => { location.hash = '#round/' + id; });
+    $('#ocrFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) ocrScorecard(f, id); e.target.value = ''; });
     view.querySelector('.holes').addEventListener('click', e => {
       const hole = e.target.closest('.hole'); if (!hole) return;
       const i = Number(hole.dataset.i), b = e.target.closest('button'); if (!b) return;
