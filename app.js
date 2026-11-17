@@ -1,4 +1,4 @@
-/* 내 골프 — 개인용 골프 기록 웹앱 (데이터는 이 브라우저에만 저장) */
+/* CH.Golf — 개인용 골프 기록 웹앱 (데이터는 이 브라우저에만 저장) */
 (function () {
   'use strict';
 
@@ -685,7 +685,7 @@
           state = Object.assign(emptyState(), d.state); save();
           [...photos.keys()].forEach(delPhoto); (d.photos || []).forEach(putPhoto);
           toast('백업을 불러왔어요'); render();
-        } catch (err) { toast('내 골프 백업 파일이 아니에요'); }
+        } catch (err) { toast('CH.Golf 백업 파일이 아니에요'); }
       };
       fr.readAsText(f);
     });
